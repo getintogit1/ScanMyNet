@@ -1,36 +1,53 @@
 #!/bin/bash#####################################################################
-#                                                                              # 
-#                                                                              #
+#          Automatically detects new ip in a given Network and performs some   #   
+#          Scans and graps informations like open Ports, Services and Vendor   #
+#          CAUTION: This script depends on nmap and is running very Loud scans #
+#          just use this script in regulated environments with legal permission#
 ################################################################################
+
+
+# loadingScreen(){
+
+#}
+
+
+checkDependencies(){
+
+}
+
 checkRootPrivileges(){
-  if [[ "${EUID}" -ne 0 ]]; then                                                     
+  if [[ "${EUID}" -ne 0 ]]; then                                               # check for root priviliges       
     echo "The Nmap OS detection scan type (-O) requires root privileges."
     exit 1
   fi
 }
 
-checkInput(){                                                                 
+checkInput(){                                                                  # Check if the two expected arguments are set
   if [[ -z "$1" ]] ; then
     echo "You must provide a target network to this script."
-    echo "Example: ${0} 167.123.177.0/24"
+    echo "${0} 167.123.177.0/24 :for scanning a external network"
+    echo "${0} local            :for scanning a internal network"
     exit 1
   fi
 }
 
-checkRootPrivileges
-checkInput "$1"
+
+scanWithARP(){
+  echo "Performing an arp-scan against ${network}..."
+    sudo arp-scan -x -I ${interface} ${network} | while read -r line; do       
+      host=$(echo "${line}" | awk '{print $1}')                               
+      if ! grep -q "${host}" "${myIps}"; then                            
+        echo "Found a new host: ${host}!"                                     
+        echo "${host}" >> "${myIps}"
+      fi
+    done
+}
 
 
 
-
-
-
-
-myIps="networkIPs.txt"
-output="output.txt"
-targetNetwork="$1"
 
 # STEP 1: Only scan if IP list doesn't exist
+runLoudNetworkScan(){
 if [[ ! -s "$myIps" ]]; then
     echo "Running a loud network scan against: $targetNetwork"
     nmapScan=$(sudo nmap -sn ${targetNetwork})
@@ -44,8 +61,11 @@ if [[ ! -s "$myIps" ]]; then
 else
     echo "[+] Skipping host discovery scan, '$myIps' already exists."
 fi
+}
+runLoudNetworkScan
 
 # STEP 2: Only run detailed scan if output.txt doesn't exist
+runDetailedNetworkScan(){
 if [[ ! -s "$output" ]]; then
     echo "[+] Running detailed Nmap scan with -A"
     nmapScanAggr=$(sudo nmap -A -iL "$myIps")
@@ -71,8 +91,12 @@ if [[ ! -s "$output" ]]; then
 else
     echo "[+] Skipping Nmap -A scan, '$output' already exists."
 fi
+}
+runDetailedNetworkScan
+
 
 # STEP 3: Add vendor column using MAC address
+scanForVendorName(){
 declare -A macVendors
 
 for mac in $(awk '{print $2}' "$output" | grep -E '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | sort -u); do
@@ -95,12 +119,33 @@ tail -n +2 "$output" | while read -r line; do
 done
 
 echo "[+] Done. Output written to 'output_with_vendor.txt'"
+}
+scanForVendorName
 
 
 
+################################################################################
+main(){
+  checkRootPrivileges
+  checkInput "$1"
+  
+  myIps="networkIPs.txt"
+  output="output.txt"
+  targetNetwork="$1"
+  interface=$(ip -o -4 addr show up | awk '{print $2}' | head -n 1)
+  previous_size=$(stat -c %s "$filename")
 
+  while [[ true ]]; do
+    scanWithARP
+    runLoudNetworkScan
+    runDetailedNetworkScan
+    scanForVendorName 
+    sleep $((RANDOM % 121 + 20))
+  done
+  
+}
 
-
+main"$@"
 
 
 
