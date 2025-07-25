@@ -1,5 +1,5 @@
 # Network Scanner Automation Script
-
+# !! Not Finished !!
 **A Bash-based solution for automated network host discovery and comprehensive scanning.**
 
 This script streamlines network monitoring by automatically detecting new hosts, performing detailed scans, and enriching results with vendor information. Designed for regulated environments where loud network scans are authorized.
