@@ -6,23 +6,28 @@
 ################################################################################
 
 
+myIps="networkIPs.txt"
+output="output.txt"
+targetNetwork="$1"
+interface=$(ip -o -4 addr show up | awk '{print $2}' | head -n 1)
+previous_size=$(stat -c %s "$filename")
 # loadingScreen(){
 
 #}
 
 
-checkDependencies(){
-
-}
+# checkDependencies(){
+#
+# }
 
 checkRootPrivileges(){
-  if [[ "${EUID}" -ne 0 ]]; then                                               # check for root priviliges       
+  if [[ "${EUID}" -ne 0 ]]; then                                               
     echo "The Nmap OS detection scan type (-O) requires root privileges."
     exit 1
   fi
 }
 
-checkInput(){                                                                  # Check if the two expected arguments are set
+checkInput(){                                                                 
   if [[ -z "$1" ]] ; then
     echo "You must provide a target network to this script."
     echo "${0} 167.123.177.0/24 :for scanning a external network"
@@ -33,8 +38,11 @@ checkInput(){                                                                  #
 
 
 scanWithARP(){
+  local interface="$1"
+  local network="$2"
   echo "Performing an arp-scan against ${network}..."
-    sudo arp-scan -x -I ${interface} ${network} | while read -r line; do       
+  
+  sudo arp-scan -x -I ${interface} ${network} | while read -r line; do       
       host=$(echo "${line}" | awk '{print $1}')                               
       if ! grep -q "${host}" "${myIps}"; then                            
         echo "Found a new host: ${host}!"                                     
@@ -101,7 +109,8 @@ declare -A macVendors
 
 for mac in $(awk '{print $2}' "$output" | grep -E '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | sort -u); do
     if [[ -n "$mac" ]]; then
-        vendor=$(curl -s "https://api.macvendors.com/${mac}")
+        vendor=$(curl -s --max-time 5 "https://api.macvendors.com/${mac}")
+        vendor=${vendor:-Unknown}
         macVendors["$mac"]="$vendor"
         sleep 3
     fi
@@ -125,18 +134,17 @@ scanForVendorName
 
 
 ################################################################################
+
+
+
 main(){
   checkRootPrivileges
   checkInput "$1"
   
-  myIps="networkIPs.txt"
-  output="output.txt"
-  targetNetwork="$1"
-  interface=$(ip -o -4 addr show up | awk '{print $2}' | head -n 1)
-  previous_size=$(stat -c %s "$filename")
+
 
   while [[ true ]]; do
-    scanWithARP
+    scanWithARP "$interface" "$targetNetwork"
     runLoudNetworkScan
     runDetailedNetworkScan
     scanForVendorName 
@@ -145,15 +153,4 @@ main(){
   
 }
 
-main"$@"
-
-
-
-
-
-
-
-
-
-
-
+main "$@"
